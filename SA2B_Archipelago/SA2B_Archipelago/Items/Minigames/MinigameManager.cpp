@@ -100,6 +100,10 @@ void MinigameManager::UpdateCurrentMinigame()
 			this->currentMinigame->OnFrame(this->_data);
 			this->_data.hierarchy->OnFrame();
 			this->_data.hierarchy->Render();
+			if (ArchipelagoManager::getInstance().IsDebug())
+			{
+				this->_data.collision->DebugDrawCollision(this->_data.icons);
+			}
 		}
 		if (this->currentMinigame->currentState == MinigameState::MGS_Victory ||
 			this->currentMinigame->currentState == MinigameState::MGS_Draw ||
@@ -123,7 +127,7 @@ void MinigameManager::UpdateCurrentMinigame()
 	{
 		if (_data.inputPress & RIF_Down)
 		{
-			this->currentMinigame = &this->fishing;
+			this->currentMinigame = &this->finalBoss;
 		}
 	}
 	*/
@@ -131,6 +135,7 @@ void MinigameManager::UpdateCurrentMinigame()
 
 void MinigameManager::EndMinigame()
 {
+	this->currentMinigame->OnCleanup(this->_data);
 	this->_data.collision->Reset();
 	this->_data.hierarchy->ClearHierarchy();
 	this->currentMinigame = nullptr;

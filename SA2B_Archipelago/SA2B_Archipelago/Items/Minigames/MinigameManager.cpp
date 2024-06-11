@@ -142,7 +142,7 @@ void MinigameManager::EndMinigame()
 	this->state = MinigameState::MGS_None;
 }
 
-void MinigameManager::StartMinigame(ItemValue item)
+void MinigameManager::StartMinigame(ItemValue item, bool locationGame)
 {
 	if (this->state != MinigameState::MGS_None)
 	{
@@ -174,6 +174,8 @@ void MinigameManager::StartMinigame(ItemValue item)
 		this->currentMinigame = &this->pokemonCount;
 		break;
 	}
+
+	this->isLocationCheck = locationGame;
 }
 
 void MinigameManager::HandleVictory()
@@ -189,14 +191,28 @@ void MinigameManager::HandleVictory()
 		itemToSend = ItemValue::IV_TwentyRings;
 	}
 
-	ItemManager::getInstance().HandleJunk(itemToSend);
+	if (this->isLocationCheck)
+	{
+		// Send Location Check
+	}
+	else
+	{
+		ItemManager::getInstance().HandleJunk(itemToSend);
+	}
 }
 
 void MinigameManager::HandleLoss()
 {
-	// TODO: Make this dynamic when we have multiple Minigames
-	ArchipelagoManager::getInstance().SetDeathCause(DeathCause::DC_Pong);
-	ArchipelagoManager::getInstance().AP_KillPlayer();
+	if (this->isLocationCheck)
+	{
+		// Don't kill from failing location check
+	}
+	else
+	{
+		// TODO: Make this dynamic when we have multiple Minigames
+		ArchipelagoManager::getInstance().SetDeathCause(DeathCause::DC_Pong);
+		ArchipelagoManager::getInstance().AP_KillPlayer();
+	}
 }
 
 void MinigameManager::SetDifficulty(int difficulty)

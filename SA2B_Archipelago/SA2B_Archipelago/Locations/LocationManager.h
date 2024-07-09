@@ -22,6 +22,7 @@ public:
 	}
 
 	void OnInitFunction(const char* path, const HelperFunctions& helperFunctions);
+	void OnInputFunction();
 	void OnFrameFunction();
 	void OnFrameLevelClears();
 	void OnFrameBossRush();
@@ -33,6 +34,7 @@ public:
 	void OnFrameOmochao();
 	void OnFrameAnimals();
 	void OnFrameItemBoxes();
+	void OnFrameBig();
 	void OnFrameKartRace();
 	void OnFrameChaoGarden();
 
@@ -50,6 +52,7 @@ public:
 	void SetOmochaoEnabled(bool omochaoEnabled);
 	void SetAnimalsEnabled(bool animalsEnabled);
 	void SetItemBoxesEnabled(bool itemboxesEnabled);
+	void SetBigEnabled(bool bigEnabled);
 	void SetKartRacesEnabled(int kartRacesEnabled);
 
 	void SetRacesPacked(bool racesPacked);
@@ -72,6 +75,7 @@ public:
 	void SendOmochaoLocationCheck();
 	void SendAnimalLocationCheck();
 	void SendItemBoxLocationCheck(ObjectMaster* itemBox);
+	void SendBigLocationCheck();
 	void SendBlackMarketLocationCheck(int menuSelection);
 
 	std::vector<int> GetChaoKeyLocationsForLevel(int levelID);
@@ -83,6 +87,7 @@ public:
 	int GetTotalAnimalLocationsForLevel(int levelID);
 	std::vector<int> GetLifeBoxLocationsForLevel(int levelID);
 	std::vector<int> GetItemBoxLocationsForLevel(int levelID);
+	std::vector<int> GetBigLocationsForLevel(int levelID);
 	int GetMaxMarketTokens();
 
 	std::vector<int> GetChaoBeginnerRaceLocations();
@@ -112,6 +117,9 @@ private:
 	unsigned int _chaoEntryTimer = 0;
 	unsigned int _whistleTimer = 0;
 
+	bool _inBigFishing = false;
+	NJS_VECTOR _FreezePos;
+
 	int _goal = 0;
 	int _requiredRank = 0;
 	bool _requireAllCannonsCoreMissions = false;
@@ -123,6 +131,7 @@ private:
 	bool _omochaoEnabled = false;
 	bool _animalsEnabled = false;
 	bool _itemBoxesEnabled = false;
+	bool _bigEnabled = false;
 	int _kartRacesEnabled = 0;
 
 	bool _racesPacked = false;
@@ -156,6 +165,7 @@ private:
 	std::map<int, OmochaoCheckData> _OmochaoData;
 	std::map<int, AnimalCheckData> _AnimalData;
 	std::map<int, ItemBoxCheckData> _ItemBoxData;
+	std::map<int, BigCheckData> _BigData;
 	std::map<int, KartRaceCheckData> _KartRaceData;
 
 	std::map<int, std::vector<int>> _ChaoRacePacks;

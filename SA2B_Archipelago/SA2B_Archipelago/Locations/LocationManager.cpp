@@ -3,8 +3,10 @@
 #include "LocationData.h"
 #include "StageSelectData.h"
 #include "../Items/ItemManager.h"
+#include "../Items/Minigames/MinigameManager.h"
 #include "../Utilities/MessageQueue.h"
 
+DataPointer(char, ShowHud, 0x0174AFCC);
 
 // Chao Key "Trampoline"
 static void __cdecl PickedUpChaoKey()
@@ -208,6 +210,11 @@ DataPointer(char, SS_SelectedTile, 0x1D1BF08);
 DataPointer(ChaoKarateManager*, KarateManager, 0x1A5D148);
 DataPointer(unsigned int, BlackMarketTokenCount, 0x1DEE41C);
 
+float dist(NJS_POINT3 a, NJS_POINT3 b)
+{
+	return sqrt(pow((b.x - a.x), 2) + pow((b.y - a.y), 2) + pow((b.z - a.z), 2));
+}
+
 
 void LocationManager::OnInitFunction(const char* path, const HelperFunctions& helperFunctions)
 {
@@ -230,6 +237,7 @@ void LocationManager::OnInitFunction(const char* path, const HelperFunctions& he
 	InitializeOmochaoChecks(this->_OmochaoData);
 	InitializeAnimalChecks(this->_AnimalData);
 	InitializeItemBoxChecks(this->_ItemBoxData);
+	InitializeBigChecks(this->_BigData);
 
 	InitializeChaoGardenChecks(this->_ChaoGardenData);
 	InitializeChaoStatChecks(this->_ChaoStatData);
@@ -243,6 +251,86 @@ void LocationManager::OnInitFunction(const char* path, const HelperFunctions& he
 	for (int i = 0; i < 7; i++)
 	{
 		this->_CollectedChaoStats[i] = std::vector<int>();
+	}
+}
+
+void LocationManager::OnInputFunction()
+{
+	if (GameMode != GameMode::GameMode_Level)
+	{
+		this->_inBigFishing = false;
+		this->_FreezePos = NJS_VECTOR();
+
+		return;
+	}
+
+	if (MainCharObj1[0] == NULL)
+	{
+		return;
+	}
+
+	if (this->_bigEnabled)
+	{
+		if (GameState != GameStates::GameStates_Pause)
+		{
+			if (this->_inBigFishing)
+			{
+				// TODO: Handle Cannon's Core switches
+				TimeStopped = 1;
+				if ((MainCharObj1[0]) && (MainCharObj2[0]))
+				{
+					MainCharObj1[0]->Action = Action_None;
+					MainCharObj1[0]->Position = this->_FreezePos;
+					MainCharObj2[0]->Speed.x = 0.0;
+					MainCharObj2[0]->Speed.y = 0.0;
+					MainCharObj2[0]->Speed.z = 0.0;
+				}
+			}
+
+			MinigameManager* minigameManager = &MinigameManager::GetInstance();
+
+			if (minigameManager->state == MinigameState::MGS_None && this->_inBigFishing)
+			{
+				TimeStopped = 0;
+				this->_inBigFishing = false;
+			}
+
+			Uint32 HeldButtons = ControllersRaw->on;
+			Uint32 PressedButtons = ControllersRaw->press;
+
+			if (minigameManager->state == MinigameState::MGS_None)
+			{
+				for (int i = BigCheck::BC_BEGIN; i < BigCheck::BC_NUM_CHECKS; i++)
+				{
+					if (this->_BigData.find(i) != this->_BigData.end())
+					{
+						BigCheckData& checkData = this->_BigData[i];
+
+						if (!checkData.CheckSent && checkData.LevelID == CurrentLevel)
+						{
+							if (dist(checkData.Position, MainCharObj1[0]->Position) < checkData.Range)
+							{
+								// TODO: RAS: Show prompt for Big
+								std::string msg1 = "PRESS Y TO FISH";
+								_helperFunctions->SetDebugFontColor(0xFFF542C8);
+								_helperFunctions->DisplayDebugString(NJM_LOCATION(0, 2), msg1.c_str());
+
+								if (PressedButtons & 0b1000000000)
+								{
+									TimeStopped = 2;
+
+									minigameManager->StartMinigame(ItemValue::IV_FishingTrap, true);
+
+									this->_inBigFishing = true;
+									this->_FreezePos = MainCharObj1[0]->Position;
+								}
+							}
+						}
+					}
+
+				}
+			}
+		}
 	}
 }
 
@@ -272,6 +360,7 @@ void LocationManager::OnFrameFunction()
 		this->OnFrameOmochao();
 		this->OnFrameAnimals();
 		this->OnFrameItemBoxes();
+		this->OnFrameBig();
 		this->OnFrameKartRace();
 	}
 }
@@ -689,6 +778,57 @@ void LocationManager::OnFrameItemBoxes()
 
 				if ((dataValue & bitFlag) != 0x00)
 				{
+					if (this->_archipelagoManager)
+					{
+						this->_archipelagoManager->SendItem(i);
+
+						checkData.CheckSent = true;
+					}
+				}
+			}
+			else
+			{
+				// Capture offline collects
+				char dataValue = *(char*)checkData.Address;
+
+				char bitFlag = (char)(0x01 << checkData.AddressBit);
+
+				if ((dataValue & bitFlag) == 0x00)
+				{
+					char newDataValue = dataValue | bitFlag;
+
+					WriteData<1>((void*)checkData.Address, newDataValue);
+				}
+			}
+		}
+	}
+}
+
+void LocationManager::OnFrameBig()
+{
+	if (!this->_bigEnabled)
+	{
+		return;
+	}
+
+	// TODO: ???
+
+	for (int i = BigCheck::BC_BEGIN; i < BigCheck::BC_NUM_CHECKS; i++)
+	{
+		if (this->_BigData.find(i) != this->_BigData.end())
+		{
+			BigCheckData& checkData = this->_BigData[i];
+
+			if (!checkData.CheckSent)
+			{
+				// DataPointer macro creates a static field, which doesn't work for this case
+				char dataValue = *(char*)checkData.Address;
+
+				char bitFlag = (char)(0x01 << checkData.AddressBit);
+
+				if ((dataValue & bitFlag) != 0x00)
+				{
+					MessageQueue::GetInstance().AddMessage("Send Item");
 					if (this->_archipelagoManager)
 					{
 						this->_archipelagoManager->SendItem(i);
@@ -1449,6 +1589,18 @@ void LocationManager::CheckLocation(int location_id)
 
 		WriteData<1>((void*)checkData.Address, newDataValue);
 	}
+	else if (this->_BigData.find(location_id) != this->_BigData.end())
+	{
+		BigCheckData& checkData = this->_BigData[location_id];
+
+		checkData.CheckSent = true;
+
+		char dataValue = *(char*)checkData.Address;
+		char bitFlag = (char)(0x01 << checkData.AddressBit);
+		char newDataValue = dataValue | bitFlag;
+
+		WriteData<1>((void*)checkData.Address, newDataValue);
+	}
 	else if (this->_KartRaceData.find(location_id) != this->_KartRaceData.end())
 	{
 		KartRaceCheckData& checkData = this->_KartRaceData[location_id];
@@ -1556,6 +1708,11 @@ void LocationManager::SetItemBoxesEnabled(bool itemBoxesEnabled)
 		WriteData<1>((void*)0x006EAE02, '\x90');
 		WriteCall(static_cast<void*>((void*)0x006EAE03), &ActivatedSunglassesItemBox);
 	}
+}
+
+void LocationManager::SetBigEnabled(bool bigEnabled)
+{
+	this->_bigEnabled = bigEnabled;
 }
 
 void LocationManager::SetKartRacesEnabled(int kartRacesEnabled)
@@ -1731,16 +1888,15 @@ void LocationManager::ResetLocations()
 		pair.second.CheckSent = false;
 	}
 
+	for (auto& pair : this->_BigData)
+	{
+		pair.second.CheckSent = false;
+	}
+
 	for (auto& pair : this->_KartRaceData)
 	{
 		pair.second.CheckSent = false;
 	}
-}
-
-
-float dist(NJS_POINT3 a, NJS_POINT3 b)
-{
-	return sqrt(pow((b.x - a.x), 2) + pow((b.y - a.y), 2) + pow((b.z - a.z), 2));
 }
 
 void LocationManager::SendChaoKeyLocationCheck()
@@ -2031,6 +2187,52 @@ void LocationManager::SendItemBoxLocationCheck(ObjectMaster* itemBox)
 	}
 }
 
+void LocationManager::SendBigLocationCheck()
+{
+	MessageQueue::GetInstance().AddMessage("Send Big Location Check");
+	if (!this->_bigEnabled)
+	{
+		return;
+	}
+
+	if (MainCharObj1[0] == NULL)
+	{
+		return;
+	}
+
+	for (int i = BigCheck::BC_BEGIN; i < BigCheck::BC_NUM_CHECKS; i++)
+	{
+		if (this->_BigData.find(i) != this->_BigData.end())
+		{
+			BigCheckData& checkData = this->_BigData[i];
+
+			if (checkData.LevelID == CurrentLevel)
+			{
+				if (dist(checkData.Position, MainCharObj1[0]->Position) < checkData.Range)
+				{
+					char dataValue = *(char*)checkData.Address;
+
+					char bitFlag = (char)(0x01 << checkData.AddressBit);
+
+					MessageQueue::GetInstance().AddMessage("Found Location Check");
+
+					if ((dataValue & bitFlag) == 0x00)
+					{
+						char dataValue = *(char*)checkData.Address;
+						char bitFlag = (char)(0x01 << checkData.AddressBit);
+						char newDataValue = dataValue | bitFlag;
+
+						MessageQueue::GetInstance().AddMessage("Write Data");
+						WriteData<1>((void*)checkData.Address, newDataValue);
+					}
+
+					return;
+				}
+			}
+		}
+	}
+}
+
 void LocationManager::SendBlackMarketLocationCheck(int menuSelection)
 {
 	if (this->_blackMarketSlots == 0)
@@ -2277,6 +2479,39 @@ std::vector<int> LocationManager::GetItemBoxLocationsForLevel(int levelID)
 			if (this->_ItemBoxData.find(locationID) != this->_ItemBoxData.end())
 			{
 				ItemBoxCheckData& checkData = this->_ItemBoxData[locationID];
+				char dataValue = *(char*)checkData.Address;
+
+				char bitFlag = (char)(0x01 << checkData.AddressBit);
+
+				if ((dataValue & bitFlag) == 0x00)
+				{
+					result.push_back(0x00);
+				}
+				else
+				{
+					result.push_back(0x01);
+				}
+			}
+		}
+	}
+
+	return result;
+}
+
+std::vector<int> LocationManager::GetBigLocationsForLevel(int levelID)
+{
+	std::vector<int> result;
+
+	if (this->_bigEnabled)
+	{
+		int checkOffset = 0x1B00;
+
+		for (int j = 0; j < 5; j++)
+		{
+			int locationID = checkOffset + (j * 0x20) + levelID;
+			if (this->_BigData.find(locationID) != this->_BigData.end())
+			{
+				BigCheckData& checkData = this->_BigData[locationID];
 				char dataValue = *(char*)checkData.Address;
 
 				char bitFlag = (char)(0x01 << checkData.AddressBit);
